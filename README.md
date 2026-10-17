@@ -1,8 +1,8 @@
 
 
-# **rrst-ros2-workspace**
+# **rrst-ros2-workspace-Harurobo-b**
 ## 1. Overview
-This is the main repository for the NHK Project, RRST, at Ritsumeikan University, containing the ROS 2 packages and microcontroller-side programs currently in use.
+このリポジトリは、関西春ロボコン2027_チームb(仮称)用に作成されたros2ワークスペースです。現在はros2can用nodeファイルが格納されています。
 
 |  | Description | Build Status |
 |---|---|---|

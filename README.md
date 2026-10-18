@@ -2,7 +2,7 @@
 
 # **rrst-ros2-workspace-Harurobo-b**
 ## 1. Overview
-このリポジトリは、関西春ロボコン2027_チームb(仮称)用に作成されたros2ワークスペースです。現在はros2can用nodeファイルが格納されています。
+このリポジトリは、関西春ロボコン2027_チームb(仮称)用に作成されたros2ワークスペースです。現在はros2can用packageが格納されています。
 
 |  | Description | Build Status |
 |---|---|---|

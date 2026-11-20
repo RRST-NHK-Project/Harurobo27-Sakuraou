@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>hardware_interface</name>
+  <name>slot_mux</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>ros2can の24スロットフレームの1スロットずつを「名前付きチャンネル」として扱い、ros2canスロット指令の合成/分解/検査 を担うノード</description>
   <maintainer email="showticbye314@gmail.com">showticbye</maintainer>
   <license>Apache-2.0</license>
 

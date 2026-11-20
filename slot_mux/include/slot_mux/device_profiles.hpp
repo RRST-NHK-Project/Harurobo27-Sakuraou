@@ -8,7 +8,7 @@ ros2can (CANホスト) とやり取りする serial_tx_[DEVICE_ID] / serial_rx_[
 int16 x 24 スロットの配列で、どのスロットが何を意味するかは配列自体には書かれていない。
 このファイルは「24スロットをどう区切るか」と「各スロットが何か (チャンネル)」を定義し、
 間違った設定を登録した時点で弾くための部品。
-hardware_interface ノード (複数ノードの指令を1枚のフレームに合成する。未作成) の
+slot_mux ノード (複数ノードの指令を1枚のフレームに合成する。未作成) の
 土台になる予定。
 ROSには依存しない (rclcpp を include しない) ので、単体でテストできる。
 
@@ -30,36 +30,42 @@ ROSには依存しない (rclcpp を include しない) ので、単体でテス
 [登録時に弾くもの (std::invalid_argument)]
   - 構成: node_count / slots_per_node が 0以下、または合計が24を超える
   - チャンネル: 名前が空 / 種類と向きの食い違い / index が範囲外 /
-               名前の重複 / 同じ向きで同じ index の重複
+    名前の重複 / 同じ向きで同じ index の重複
   - expectedDirection(): 未知の ChannelKind (通常は起きない。enum に種類を足して
                          ここの switch を直し忘れたときの保険)
   設定ミスは「動いている最中」ではなく「起動した瞬間」に見つけたいので、
   ここでは戻り値ではなく例外で止める (esc_ctrl / cubemars_ctrl も、起動時のパラメータ
   チェックで同じようにしている)。
 
-[例外ではなく -1 を返すもの]
-  Return_SlotIndex(node_index, local): 範囲外なら -1 を返す
-  (動作中にも呼ぶ可能性がある計算用の関数なので、ノードを落とさないようにしている)。
+  returnSlotIndex(): node_index / local が範囲外
 
 [使い方]
   DeviceProfiles foot(1, 5);  // 足回り基板1台、1ノードあたり5スロット
   foot.addChannel({"drive_md1", 0, ChannelKind::kMotor,   Direction::kTx});
   foot.addChannel({"drive_enc1", 0, ChannelKind::kCounter, Direction::kRx});
-*/
-#pragma once // 多重includeを防ぐためのお守り？
 
-#include <iostream>
+  Description written by claude Opus 5.5
+*/
+//以下定義
+/*------------------------------------------------------------------------------------------------------------*/
+#pragma once // ヘッダファイルの多重includeを防ぐためのお守り
+
+
 #include <stdexcept>
 #include <string>
 #include <vector>
 
-enum class Direction
+
+namespace slot_mux
+{
+
+enum class Direction // 通信方向 (TX/RX),enum classの命名法則はrobstride_ctrlから倣った
 {
     kTx,
     kRx
 };
 
-enum class ChannelKind
+enum class ChannelKind // チャンネルの種類
 {
     kMotor,
     kCounter,
@@ -68,7 +74,7 @@ enum class ChannelKind
     kRawIn
 };
 
-struct ChannelDef
+struct ChannelDef // チャンネルの定義に必要な要素をstructで定義
 {
     std::string name;
     int index;
@@ -76,7 +82,7 @@ struct ChannelDef
     Direction direction;
 };
 
-inline std::string Direction2String(Direction d)
+inline std::string directionToString(Direction d) // throw処理用string化関数
 {
     switch (d)
     {
@@ -89,7 +95,7 @@ inline std::string Direction2String(Direction d)
     }
 }
 
-inline std::string ChannelKind2String(ChannelKind k)
+inline std::string channelKindToString(ChannelKind k) // throw処理用string化関数
 {
     switch (k)
     {
@@ -108,7 +114,7 @@ inline std::string ChannelKind2String(ChannelKind k)
     }
 }
 
-inline Direction expectedDirection(ChannelKind kind)
+inline Direction expectedDirection(ChannelKind kind) // チャンネルの種類に合致した通信方向を返す関数
 {
     switch (kind)
     {
@@ -123,6 +129,9 @@ inline Direction expectedDirection(ChannelKind kind)
         throw std::invalid_argument("Unknown channel kind");
     }
 }
+/*------------------------------------------------------------------------------------------------------------*/
+
+
 class DeviceProfiles
 { // スロット番号を返すためのクラスの定義
 private:
@@ -131,61 +140,63 @@ private:
     std::vector<ChannelDef> channel_defs_;
 
 public:
-    int total_slots() const
+    int totalSlots() const // 24スロットのうち、何スロットを使うかを返す関数
     {
         return node_count_ * slots_per_node_;
     }
 
-    DeviceProfiles(int node_count, int slots_per_node)
+    DeviceProfiles(int node_count, int slots_per_node) // node_count = 1, slots_per_node = 5 のように、コンストラクタでノード数とスロット数を指定する
         : node_count_(node_count), slots_per_node_(slots_per_node)
     {
-        if (total_slots() > 24 || node_count_ <= 0 || slots_per_node_ <= 0)
+        if (totalSlots() > 24 || node_count_ <= 0 || slots_per_node_ <= 0) // 25スロット以上、またはノード数・スロット数が0以下の場合は例外を投げる
         {
             throw std::invalid_argument("無効な1バスごとのノード数、または1ノードごとのスロット数です。ノード数*ノードごとのスロット数は1以上,24以下である必要があります");
         }
     }
 
-    void addChannel(ChannelDef channel_def)// structされたChannelDefという型のchannel_defという変数
-    { 
-        if(channel_def.name.empty()){
+    void addChannel(ChannelDef channel_def)
+    {
+        if (channel_def.name.empty())
+        {
             throw std::invalid_argument("無効な名前です。チャンネルの名前は空文字列にできません");
         }
 
         if (channel_def.direction != expectedDirection(channel_def.kind))
         {
-            throw std::invalid_argument("無効な方向です。チャンネルの種類" + ChannelKind2String(channel_def.kind) + "に対して不適切な方向"  
-                                        + Direction2String(channel_def.direction) + "が指定されています");
+            throw std::invalid_argument("無効な方向です。チャンネルの種類" + channelKindToString(channel_def.kind) + "に対して不適切な方向" +
+                                            directionToString(channel_def.direction) + "が指定されています");
         }
 
-        if (channel_def.index >= total_slots() ||channel_def.index < 0)
+        if (channel_def.index >= totalSlots() || channel_def.index < 0)
         {
-            throw std::invalid_argument("無効なindexです。indexは0以上、total_slots()未満である必要があります");
+            throw std::invalid_argument("無効なindexです。indexは0以上、totalSlots()未満である必要があります");
         }
 
-        for (const ChannelDef &c : channel_defs_ ){//
-            if(c.name == channel_def.name){
+        for (const ChannelDef &c : channel_defs_)
+        { // 最後に全体のチャンネル定義を見て、名前の重複や同じ通信方向で同じindexの重複がないかを確認し、スロットの上書きを防ぐ
+            if (c.name == channel_def.name)
+            {
                 throw std::invalid_argument("無効な名前です。すでに同じ名前のチャンネルが存在します:" + channel_def.name);
-            }else if (c.direction == channel_def.direction && c.index == channel_def.index){
-                throw std::invalid_argument("無効なindexです。すでに" 
-                                            + Direction2String(channel_def.direction) + "方向のチャンネル" 
-                                            + c.name + "が存在します:" + std::to_string(channel_def.index));
             }
-
+            else if (c.direction == channel_def.direction && c.index == channel_def.index)
+            {
+                throw std::invalid_argument("無効なindexです。すでに" + directionToString(channel_def.direction) + "方向のチャンネル" + c.name + "が存在します:" + std::to_string(channel_def.index));
+            }
         }
-
-
-
 
         channel_defs_.push_back(channel_def);
     }
 
-    int Return_SlotIndex(int node_index, int local_slot_id)
+    int returnSlotIndex(int node_index, int local_slot_id)
     {
-        if (node_index >= node_count_ || local_slot_id >= slots_per_node_ || node_index < 0 || local_slot_id < 0 || node_index * slots_per_node_ + local_slot_id >= 24) //
+        if (node_index >= node_count_ || local_slot_id >= slots_per_node_ || node_index < 0 || local_slot_id < 0 )
         {
-            std::cout << "Invalid slot index" << std::endl;
-            return -1;
+            throw std::invalid_argument("無効なスロット指定です。node_index=" + std::to_string(node_index) + ", local_slot_id=" + std::to_string(local_slot_id) +
+                                        "は、node_count=" + std::to_string(node_count_) +
+                                        ", slots_per_node=" + std::to_string(slots_per_node_) + "の範囲外です");
         }
-        return (node_index * slots_per_node_) + local_slot_id;
+        return (node_index * slots_per_node_) + local_slot_id; // グローバルindexを返す
     }
 };
+
+} // namespace slot_mux
